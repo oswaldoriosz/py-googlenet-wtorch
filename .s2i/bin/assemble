@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# Version 1.2
+# Version 1.3
 # Install Python dependencies
-pip install --no-cache-dir -r /tmp/src/upload/src/requirements.txt
+pip install --no-cache-dir -r /tmp/src/requirements.txt
 
 # Copy application code
 mkdir -p /opt/app-root/src
-cp -r /tmp/src/upload/src/* /opt/app-root/src/
+cp -r /tmp/src/* /opt/app-root/src/
 
 # Compile googlenet.so
 cd /opt/app-root/src
