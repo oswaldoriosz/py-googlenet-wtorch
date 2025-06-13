@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+# Version 1.2
+# Install Python dependencies
+pip install --no-cache-dir -r /tmp/src/upload/src/requirements.txt
+
+# Copy application code
+mkdir -p /opt/app-root/src
+cp -r /tmp/src/upload/src/* /opt/app-root/src/
+
+# Compile googlenet.so
+cd /opt/app-root/src
+g++ -shared -fPIC -o googlenet.so main.cpp \
+    -I/data/libtorch/include \
+    -I/data/libtorch/include/torch/csrc/api/include \
+    -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
+    -L/data/libtorch/lib \
+    -ltorch -ltorch_cpu -lc10 \
+    -std=c++17 \
+    -Wl,-rpath,/data/libtorch/lib
+
+# Ensure data directory exists
+mkdir -p /opt/app-root/src/data
+
+# Copy model and labels from PVC
+cp /data/googlenet.pt /opt/app-root/src/data/googlenet.pt
+cp /data/imagenet_classes.txt /opt/app-root/src/data/imagenet_classes.txt
