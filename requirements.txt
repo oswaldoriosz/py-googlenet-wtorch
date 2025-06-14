@@ -1,8 +1,8 @@
-fastapi==0.115.0 
-uvicorn==0.30.6 
-torch==2.4.1+cpu 
-torchvision==0.19.1+cpu 
-Pillow==10.4.0 
-matplotlib==3.9.2 
-python-multipart==0.0.9
+fastapi==0.115.0
+uvicorn==0.30.6
+torch==2.4.1
+torchvision==0.19.1
+Pillow==10.4.0
+matplotlib==3.9.2
 pybind11==2.13.6
+python-multipart==0.0.9
