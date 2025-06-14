@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Version 1.8
+# Version 1.9
 # Directorio de trabajo
 cd /tmp/src
 
@@ -12,6 +12,8 @@ if ! command -v g++ &> /dev/null; then
 fi
 
 # Verificar la presencia de libtorch en el PVC
+echo "Verificando contenido del PVC en /data..."
+ls -lh /data || echo "Error: No se pudo listar /data"
 if [ ! -d "/data/libtorch" ]; then
     echo "Error: El directorio /data/libtorch no existe en el PVC"
     exit 1
@@ -23,26 +25,29 @@ if [ ! -f "/data/libtorch/include/torch/script.h" ]; then
 fi
 
 # Verificar la presencia de wheels en el PVC
+echo "Verificando directorio de wheels en /data/wheels..."
+ls -lh /data/wheels || echo "Error: No se pudo listar /data/wheels"
 if [ ! -d "/data/wheels" ]; then
     echo "Error: El directorio /data/wheels no existe en el PVC"
     exit 1
 fi
 
 # Recombinar las partes de los wheels si están particionados
-#for whl in /data/wheels/*.whl.part*; do
-#    if [ -f "$whl" ]; then
-#        base_whl=${whl%.part*}
-#        if [ ! -f "$base_whl" ]; then
-#            echo "Recombinando $base_whl..."
-#            cat $base_whl.part* > $base_whl || {
-#                echo "Error: No se pudo recombinar $base_whl"
-#                exit 1
-#            }
-#        fi
-#    fi
-#done
+for whl in /data/wheels/*.whl.part*; do
+    if [ -f "$whl" ]; then
+        base_whl=${whl%.part*}
+        if [ ! -f "$base_whl" ]; then
+            echo "Recombinando $base_whl..."
+            cat $base_whl.part* > $base_whl || {
+                echo "Error: No se pudo recombinar $base_whl"
+                exit 1
+            }
+        fi
+    fi
+done
 
 # Instalar dependencias de Python desde los wheels en el PVC
+echo "Instalando dependencias desde /data/wheels..."
 pip install --no-index --find-links /data/wheels \
     fastapi==0.115.0 \
     uvicorn==0.30.6 \
@@ -54,6 +59,7 @@ pip install --no-index --find-links /data/wheels \
     python-multipart==0.0.9
 
 # Compilar el módulo C++ usando libtorch desde /data/libtorch
+echo "Compilando googlenet.so..."
 g++ -shared -fPIC -o googlenet.so main.cpp \
     -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
     -I/data/libtorch/include \
@@ -64,12 +70,15 @@ g++ -shared -fPIC -o googlenet.so main.cpp \
     -Wl,-rpath,/data/libtorch/lib
 
 # Copiar los archivos necesarios al directorio de runtime
+echo "Copiando archivos al directorio de runtime..."
 mkdir -p /opt/app-root/src/data
 cp googlenet.so main.py /opt/app-root/src/
 cp /data/googlenet.pt /opt/app-root/src/data/
 cp /data/imagenet_classes.txt /opt/app-root/src/data/
 
 # Configurar permisos
+echo "Configurando permisos..."
 chown -R 1001:0 /opt/app-root/src
 chmod -R g+w /opt/app-root/src
 chmod +x /opt/app-root/src/main.py
+echo "Assemble completado exitosamente."
