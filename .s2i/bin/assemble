@@ -1,28 +1,75 @@
 #!/bin/bash
 set -e
 
-# Version 1.3
-# Install Python dependencies
-pip install --no-cache-dir -r /tmp/src/requirements.txt
+# Version 1.8
+# Directorio de trabajo
+cd /tmp/src
 
-# Copy application code
-mkdir -p /opt/app-root/src
-cp -r /tmp/src/* /opt/app-root/src/
+# Verificar si g++ está instalado
+if ! command -v g++ &> /dev/null; then
+    echo "Error: g++ no está instalado"
+    exit 1
+fi
 
-# Compile googlenet.so
-cd /opt/app-root/src
+# Verificar la presencia de libtorch en el PVC
+if [ ! -d "/data/libtorch" ]; then
+    echo "Error: El directorio /data/libtorch no existe en el PVC"
+    exit 1
+fi
+if [ ! -f "/data/libtorch/include/torch/script.h" ]; then
+    echo "Error: torch/script.h no se encuentra en /data/libtorch/include/torch"
+    ls -la /data/libtorch/include/torch
+    exit 1
+fi
+
+# Verificar la presencia de wheels en el PVC
+if [ ! -d "/data/wheels" ]; then
+    echo "Error: El directorio /data/wheels no existe en el PVC"
+    exit 1
+fi
+
+# Recombinar las partes de los wheels si están particionados
+#for whl in /data/wheels/*.whl.part*; do
+#    if [ -f "$whl" ]; then
+#        base_whl=${whl%.part*}
+#        if [ ! -f "$base_whl" ]; then
+#            echo "Recombinando $base_whl..."
+#            cat $base_whl.part* > $base_whl || {
+#                echo "Error: No se pudo recombinar $base_whl"
+#                exit 1
+#            }
+#        fi
+#    fi
+#done
+
+# Instalar dependencias de Python desde los wheels en el PVC
+pip install --no-index --find-links /data/wheels \
+    fastapi==0.115.0 \
+    uvicorn==0.30.6 \
+    torch==2.4.1 \
+    torchvision==0.19.1 \
+    Pillow==10.4.0 \
+    matplotlib==3.9.2 \
+    pybind11==2.13.6 \
+    python-multipart==0.0.9
+
+# Compilar el módulo C++ usando libtorch desde /data/libtorch
 g++ -shared -fPIC -o googlenet.so main.cpp \
+    -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
     -I/data/libtorch/include \
     -I/data/libtorch/include/torch/csrc/api/include \
-    -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
     -L/data/libtorch/lib \
     -ltorch -ltorch_cpu -lc10 \
     -std=c++17 \
     -Wl,-rpath,/data/libtorch/lib
 
-# Ensure data directory exists
+# Copiar los archivos necesarios al directorio de runtime
 mkdir -p /opt/app-root/src/data
+cp googlenet.so main.py /opt/app-root/src/
+cp /data/googlenet.pt /opt/app-root/src/data/
+cp /data/imagenet_classes.txt /opt/app-root/src/data/
 
-# Copy model and labels from PVC
-cp /data/googlenet.pt /opt/app-root/src/data/googlenet.pt
-cp /data/imagenet_classes.txt /opt/app-root/src/data/imagenet_classes.txt
+# Configurar permisos
+chown -R 1001:0 /opt/app-root/src
+chmod -R g+w /opt/app-root/src
+chmod +x /opt/app-root/src/main.py
