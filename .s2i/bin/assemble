@@ -1,40 +1,116 @@
 #!/bin/bash
 set -e
 
-# Version 2.0
+# Version 2.4
 # Directorio de trabajo
 cd /tmp/src
 
-# Verificar si g++ está instalado
+# Verificar si g++ y wget están instalados
 if ! command -v g++ &> /dev/null; then
     echo "Error: g++ no está instalado"
     exit 1
 fi
+if ! command -v wget &> /dev/null; then
+    echo "Error: wget no está instalado"
+    exit 1
+fi
 
-# Verificar la presencia de libtorch en el PVC
+# Crear directorios temporales
+mkdir -p /tmp/libtorch/{bin,include/torch/csrc/api/include,lib,share} /tmp/wheels
+
+# Descargar libtorch desde Google Drive
+# Nota: Reemplazar FILE_IDs con los IDs reales de los archivos en la carpeta libtorch
+echo "Descargando libtorch desde Google Drive..."
+LIBTORCH_FILES=(
+    # Archivos clave de libtorch (ajustar según estructura real en Google Drive)
+    "lib/libtorch.so|LIBTORCH_SO_FILE_ID"
+    "lib/libtorch_cpu.so|LIBTORCH_CPU_FILE_ID"
+    "lib/libc10.so|LIBC10_FILE_ID"
+    "include/torch/script.h|SCRIPT_H_FILE_ID"
+    "include/torch/csrc/api/include/torch/torch.h|TORCH_H_FILE_ID"
+    # Agregar más archivos si es necesario (bin/, share/, etc.)
+)
+for entry in "${LIBTORCH_FILES[@]}"; do
+    file=$(echo "$entry" | cut -d'|' -f1)
+    file_id=$(echo "$entry" | cut -d'|' -f2)
+    dir=$(dirname "/tmp/libtorch/$file")
+    mkdir -p "$dir"
+    wget -O "/tmp/libtorch/$file" "https://drive.google.com/uc?export=download&id=$file_id" || { echo "Error: No se pudo descargar $file"; exit 1; }
+done
+
+# Verificar libtorch
+echo "Verificando contenido de libtorch..."
+ls -lh /tmp/libtorch/lib /tmp/libtorch/include/torch || echo "Error: No se pudo listar /tmp/libtorch"
+if [ ! -f "/tmp/libtorch/include/torch/script.h" ]; then
+    echo "Error: torch/script.h no se encuentra en /tmp/libtorch/include/torch"
+    ls -la /tmp/libtorch/include/torch
+    exit 1
+fi
+if [ ! -f "/tmp/libtorch/lib/libtorch.so" ]; then
+    echo "Error: libtorch.so no se encuentra en /tmp/libtorch/lib"
+    ls -la /tmp/libtorch/lib
+    exit 1
+fi
+
+# Descargar wheels desde Google Drive
+echo "Descargando wheels desde Google Drive..."
+WHEEL_FILES=(
+    "fastapi-0.115.0-py3-none-any.whl|FASTAPI_WHL_FILE_ID"
+    "uvicorn-0.30.6-py3-none-any.whl|UVICORN_WHL_FILE_ID"
+    "torch-2.4.1-cp312-cp312-manylinux1_x86_64.whl|TORCH_WHL_FILE_ID"
+    "torchvision-0.19.1-cp312-cp312-manylinux1_x86_64.whl|TORCHVISION_WHL_FILE_ID"
+    "Pillow-10.4.0-cp312-cp312-manylinux_2_28_x86_64.whl|PILLOW_WHL_FILE_ID"
+    "matplotlib-3.9.2-cp312-cp312-manylinux_2_17_x86_64.whl|MATPLOTLIB_WHL_FILE_ID"
+    "pybind11-2.13.6-py3-none-any.whl|PYBIND11_WHL_FILE_ID"
+    "python_multipart-0.0.9-py3-none-any.whl|PYTHON_MULTIPART_WHL_FILE_ID"
+    "MarkupSafe-2.1.5-cp312-cp312-manylinux_2_17_x86_64.whl|MARKUPSAFE_WHL_FILE_ID"
+    "anyio-4.6.0-py3-none-any.whl|ANYIO_WHL_FILE_ID"
+    "click-8.1.7-py3-none-any.whl|CLICK_WHL_FILE_ID"
+    "contourpy-1.3.0-cp312-cp312-manylinux_2_17_x86_64.whl|CONTOURPY_WHL_FILE_ID"
+    "cycler-0.12.1-py3-none-any.whl|CYCLER_WHL_FILE_ID"
+    "filelock-3.16.1-py3-none-any.whl|FILELOCK_WHL_FILE_ID"
+    "fonttools-4.53.1-cp312-cp312-manylinux_2_17_x86_64.whl|FONTTOOLS_WHL_FILE_ID"
+    "fsspec-2024.9.0-py3-none-any.whl|FSSPEC_WHL_FILE_ID"
+    "h11-0.14.0-py3-none-any.whl|H11_WHL_FILE_ID"
+    "httptools-0.6.1-cp312-cp312-manylinux_2_17_x86_64.whl|HTTPTOOLS_WHL_FILE_ID"
+    "Jinja2-3.1.4-py3-none-any.whl|JINJA2_WHL_FILE_ID"
+    "kiwisolver-1.4.7-cp312-cp312-manylinux_2_17_x86_64.whl|KIWISOLVER_WHL_FILE_ID"
+    "mpmath-1.3.0-py3-none-any.whl|MPMATH_WHL_FILE_ID"
+    "networkx-3.3-py3-none-any.whl|NETWORKX_WHL_FILE_ID"
+    "numpy-2.1.1-cp312-cp312-manylinux_2_17_x86_64.whl|NUMPY_WHL_FILE_ID"
+    "packaging-24.1-py3-none-any.whl|PACKAGING_WHL_FILE_ID"
+    "pyparsing-3.1.4-py3-none-any.whl|PYPARSING_WHL_FILE_ID"
+    "python_dateutil-2.9.0.post0-py2.py3-none-any.whl|PYTHON_DATEUTIL_WHL_FILE_ID"
+    "python_dotenv-1.0.1-py3-none-any.whl|PYTHON_DOTENV_WHL_FILE_ID"
+    "six-1.16.0-py2.py3-none-any.whl|SIX_WHL_FILE_ID"
+    "starlette-0.38.5-py3-none-any.whl|STARLETTE_WHL_FILE_ID"
+    "sympy-1.13.2-py3-none-any.whl|SYMPY_WHL_FILE_ID"
+    "typing_extensions-4.12.2-py3-none-any.whl|TYPING_EXTENSIONS_WHL_FILE_ID"
+    "uvloop-0.20.0-cp312-cp312-manylinux_2_17_x86_64.whl|UVLOOP_WHL_FILE_ID"
+    "watchfiles-0.24.0-cp312-cp312-manylinux_2_17_x86_64.whl|WATCHFILES_WHL_FILE_ID"
+    "websockets-13.0.1-cp312-cp312-manylinux_2_5_x86_64.whl|WEBSOCKETS_WHL_FILE_ID"
+)
+for entry in "${WHEEL_FILES[@]}"; do
+    file=$(echo "$entry" | cut -d'|' -f1)
+    file_id=$(echo "$entry" | cut -d'|' -f2)
+    wget -O "/tmp/wheels/$file" "https://drive.google.com/uc?export=download&id=$file_id" || { echo "Error: No se pudo descargar $file"; exit 1; }
+done
+
+# Verificar wheels
+echo "Verificando directorio de wheels..."
+ls -lh /tmp/wheels || echo "Error: No se pudo listar /tmp/wheels"
+
+# Verificar PVC para googlenet.pt e imagenet_classes.txt
 echo "Verificando contenido del PVC en /data..."
-ls -lh /data || echo "Error: No se pudo listar /data"
-if [ ! -d "/data/libtorch" ]; then
-    echo "Error: El directorio /data/libtorch no existe en el PVC"
-    exit 1
-fi
-if [ ! -f "/data/libtorch/include/torch/script.h" ]; then
-    echo "Error: torch/script.h no se encuentra en /data/libtorch/include/torch"
-    ls -la /data/libtorch/include/torch
+ls -lh /data || { echo "Error: No se pudo listar /data"; exit 1; }
+if [ ! -f "/data/googlenet.pt" ] || [ ! -f "/data/imagenet_classes.txt" ]; then
+    echo "Error: googlenet.pt o imagenet_classes.txt no están en /data"
     exit 1
 fi
 
-# Verificar la presencia de wheels en el PVC
-echo "Verificando directorio de wheels en /data/wheels..."
-ls -lh /data/wheels || echo "Error: No se pudo listar /data/wheels"
-if [ ! -d "/data/wheels" ]; then
-    echo "Error: El directorio /data/wheels no existe en el PVC"
-    exit 1
-fi
-
-# Instalar dependencias de Python desde los wheels en el PVC
-echo "Instalando dependencias desde /data/wheels..."
-pip install --no-index --find-links /data/wheels \
+# Instalar dependencias de Python desde los wheels
+echo "Instalando dependencias desde /tmp/wheels..."
+pip install --no-index --find-links /tmp/wheels \
     fastapi==0.115.0 \
     uvicorn==0.30.6 \
     torch==2.4.1 \
@@ -44,23 +120,24 @@ pip install --no-index --find-links /data/wheels \
     pybind11==2.13.6 \
     python-multipart==0.0.9
 
-# Compilar el módulo C++ usando libtorch desde /data/libtorch
+# Compilar el módulo C++ usando libtorch
 echo "Compilando googlenet.so..."
 g++ -shared -fPIC -o googlenet.so main.cpp \
     -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
-    -I/data/libtorch/include \
-    -I/data/libtorch/include/torch/csrc/api/include \
-    -L/data/libtorch/lib \
+    -I/tmp/libtorch/include \
+    -I/tmp/libtorch/include/torch/csrc/api/include \
+    -L/tmp/libtorch/lib \
     -ltorch -ltorch_cpu -lc10 \
     -std=c++17 \
-    -Wl,-rpath,/data/libtorch/lib
+    -Wl,-rpath,/opt/app-root/src/libtorch/lib
 
 # Copiar los archivos necesarios al directorio de runtime
 echo "Copiando archivos al directorio de runtime..."
-mkdir -p /opt/app-root/src/data
+mkdir -p /opt/app-root/src/data /opt/app-root/src/libtorch
 cp googlenet.so main.py /opt/app-root/src/
 cp /data/googlenet.pt /opt/app-root/src/data/
 cp /data/imagenet_classes.txt /opt/app-root/src/data/
+cp -r /tmp/libtorch/* /opt/app-root/src/libtorch/
 
 # Configurar permisos
 echo "Configurando permisos..."
