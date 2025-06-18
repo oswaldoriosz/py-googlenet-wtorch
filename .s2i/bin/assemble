@@ -1,11 +1,11 @@
 #!/bin/bash
 set -e
 
-# Version 2.8
+# Version 2.9-fallback
 # Directorio de trabajo
 cd /tmp/src
 
-# Verificar si g++ y wget están instalados
+# Verificar si g++, wget, python3 y file están instalados
 if ! command -v g++ &> /dev/null; then
     echo "Error: g++ no está instalado"
     exit 1
@@ -18,13 +18,25 @@ if ! command -v python3 &> /dev/null; then
     echo "Error: python3 no está instalado"
     exit 1
 fi
+if ! command -v file &> /dev/null; then
+    echo "Error: file no está instalado"
+    exit 1
+fi
 
 # Crear directorios temporales
-mkdir -p /tmp/libtorch /tmp/wheels
+mkdir -p /tmp/libtorch /tmp/wheels /tmp/data
 
 # Descargar libtorch.zip desde Google Drive
 echo "Descargando libtorch.zip desde Google Drive..."
 wget -O /tmp/libtorch.zip "https://drive.google.com/uc?export=download&id=19R2wgwkuK_FcAGmpx6GmlCMx_SeGSRX5" || { echo "Error: No se pudo descargar libtorch.zip"; exit 1; }
+
+# Validar que libtorch.zip es un archivo zip
+echo "Validando libtorch.zip..."
+if ! file /tmp/libtorch.zip | grep -q "Zip archive"; then
+    echo "Error: libtorch.zip no es un archivo zip válido"
+    cat /tmp/libtorch.zip | head -n 10
+    exit 1
+fi
 
 # Descomprimir libtorch.zip usando Python
 echo "Descomprimiendo libtorch.zip con Python..."
@@ -54,6 +66,14 @@ fi
 echo "Descargando wheels.zip desde Google Drive..."
 wget -O /tmp/wheels.zip "https://drive.google.com/uc?export=download&id=147OfftZKzGFBsTyh_wDFZ4C1PkMTv05E" || { echo "Error: No se pudo descargar wheels.zip"; exit 1; }
 
+# Validar que wheels.zip es un archivo zip
+echo "Validando wheels.zip..."
+if ! file /tmp/wheels.zip | grep -q "Zip archive"; then
+    echo "Error: wheels.zip no es un archivo zip válido"
+    cat /tmp/wheels.zip | head -n 10
+    exit 1
+fi
+
 # Descomprimir wheels.zip usando Python
 echo "Descomprimiendo wheels.zip con Python..."
 python3 - <<EOF || { echo "Error: No se pudo descomprimir wheels.zip"; exit 1; }
@@ -73,11 +93,16 @@ if [ ! -f "/tmp/wheels/fastapi-0.115.0-py3-none-any.whl" ]; then
     exit 1
 fi
 
-# Verificar PVC para googlenet.pt e imagenet_classes.txt
-echo "Verificando contenido del PVC en /data..."
-ls -lh /data || { echo "Error: No se pudo listar /data"; exit 1; }
-if [ ! -f "/data/googlenet.pt" ] || [ ! -f "/data/imagenet_classes.txt" ]; then
-    echo "Error: googlenet.pt o imagenet_classes.txt no están en /data"
+# Descargar googlenet.pt e imagenet_classes.txt desde Google Drive (fallback)
+echo "Descargando googlenet.pt e imagenet_classes.txt desde Google Drive..."
+wget -O /tmp/data/googlenet.pt "https://drive.google.com/uc?export=download&id=GOOGLENET_PT_FILE_ID" || { echo "Error: No se pudo descargar googlenet.pt"; exit 1; }
+wget -O /tmp/data/imagenet_classes.txt "https://drive.google.com/uc?export=download&id=IMAGENET_TXT_FILE_ID" || { echo "Error: No se pudo descargar imagenet_classes.txt"; exit 1; }
+
+# Verificar archivos de datos
+echo "Verificando archivos de datos..."
+ls -lh /tmp/data || { echo "Error: No se pudo listar /tmp/data"; exit 1; }
+if [ ! -f "/tmp/data/googlenet.pt" ] || [ ! -f "/tmp/data/imagenet_classes.txt" ]; then
+    echo "Error: googlenet.pt o imagenet_classes.txt no están en /tmp/data"
     exit 1
 fi
 
@@ -108,13 +133,12 @@ g++ -shared -fPIC -o googlenet.so main.cpp \
 echo "Copiando archivos al directorio de runtime..."
 mkdir -p /opt/app-root/src/data /opt/app-root/src/libtorch
 cp googlenet.so main.py /opt/app-root/src/
-cp /data/googlenet.pt /opt/app-root/src/data/
-cp /data/imagenet_classes.txt /opt/app-root/src/data/
+cp /tmp/data/googlenet.pt /opt/app-root/src/data/
+cp /tmp/data/imagenet_classes.txt /opt/app-root/src/data/
 cp -r /tmp/libtorch/* /opt/app-root/src/libtorch/
 
 # Configurar permisos
 echo "Configurando permisos..."
 chown -R 1001:0 /opt/app-root/src
-chmod -R g+w /opt/app-root/src
 chmod +x /opt/app-root/src/main.py
 echo "Assemble completado exitosamente."
