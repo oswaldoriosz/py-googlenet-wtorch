@@ -1,11 +1,12 @@
+
 #!/bin/bash
 set -e
 
-# Version 2.9-fallback
+# Version 2.9
 # Directorio de trabajo
 cd /tmp/src
 
-# Verificar si g++, wget, python3 y file están instalados
+# Verificar si g++, wget y python3 están instalados
 if ! command -v g++ &> /dev/null; then
     echo "Error: g++ no está instalado"
     exit 1
@@ -24,7 +25,7 @@ if ! command -v file &> /dev/null; then
 fi
 
 # Crear directorios temporales
-mkdir -p /tmp/libtorch /tmp/wheels /tmp/data
+mkdir -p /tmp/libtorch /tmp/wheels
 
 # Descargar libtorch.zip desde Google Drive
 echo "Descargando libtorch.zip desde Google Drive..."
@@ -93,16 +94,11 @@ if [ ! -f "/tmp/wheels/fastapi-0.115.0-py3-none-any.whl" ]; then
     exit 1
 fi
 
-# Descargar googlenet.pt e imagenet_classes.txt desde Google Drive (fallback)
-echo "Descargando googlenet.pt e imagenet_classes.txt desde Google Drive..."
-wget -O /tmp/data/googlenet.pt "https://drive.google.com/uc?export=download&id=GOOGLENET_PT_FILE_ID" || { echo "Error: No se pudo descargar googlenet.pt"; exit 1; }
-wget -O /tmp/data/imagenet_classes.txt "https://drive.google.com/uc?export=download&id=IMAGENET_TXT_FILE_ID" || { echo "Error: No se pudo descargar imagenet_classes.txt"; exit 1; }
-
-# Verificar archivos de datos
-echo "Verificando archivos de datos..."
-ls -lh /tmp/data || { echo "Error: No se pudo listar /tmp/data"; exit 1; }
-if [ ! -f "/tmp/data/googlenet.pt" ] || [ ! -f "/tmp/data/imagenet_classes.txt" ]; then
-    echo "Error: googlenet.pt o imagenet_classes.txt no están en /tmp/data"
+# Verificar PVC para googlenet.pt e imagenet_classes.txt
+echo "Verificando contenido del PVC en /data..."
+ls -lh /data || { echo "Error: No se pudo listar /data"; exit 1; }
+if [ ! -f "/data/googlenet.pt" ] || [ ! -f "/data/imagenet_classes.txt" ]; then
+    echo "Error: googlenet.pt o imagenet_classes.txt no están en /data"
     exit 1
 fi
 
@@ -133,12 +129,13 @@ g++ -shared -fPIC -o googlenet.so main.cpp \
 echo "Copiando archivos al directorio de runtime..."
 mkdir -p /opt/app-root/src/data /opt/app-root/src/libtorch
 cp googlenet.so main.py /opt/app-root/src/
-cp /tmp/data/googlenet.pt /opt/app-root/src/data/
-cp /tmp/data/imagenet_classes.txt /opt/app-root/src/data/
+cp /data/googlenet.pt /opt/app-root/src/data/
+cp /data/imagenet_classes.txt /opt/app-root/src/data/
 cp -r /tmp/libtorch/* /opt/app-root/src/libtorch/
 
 # Configurar permisos
 echo "Configurando permisos..."
 chown -R 1001:0 /opt/app-root/src
+chmod -R g+w /opt/app-root/src
 chmod +x /opt/app-root/src/main.py
 echo "Assemble completado exitosamente."
