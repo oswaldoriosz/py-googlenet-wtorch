@@ -1,8 +1,7 @@
-
 #!/bin/bash
 set -e
 
-# Version 2.10
+# Version 2.12
 # Directorio de trabajo
 cd /tmp/src
 
@@ -23,31 +22,61 @@ fi
 # Crear directorios temporales
 mkdir -p /tmp/libtorch /tmp/wheels
 
-# Combinar partes de libtorch.zip
-echo "Combinando partes de libtorch.zip..."
-cat /tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.part* > /tmp/libtorch.zip || { echo "Error: No se pudo combinar libtorch.zip"; exit 1; }
+# Verificar partes de libtorch
+echo "Verificando partes de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
+for part in partaa partab partac partad partae; do
+    if [ ! -f "/tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.$part" ]; then
+        echo "Error: libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.$part no encontrado"
+        ls -la /tmp/src/lib
+        exit 1
+    fi
+done
 
-# Validar que libtorch.zip es un archivo zip
-echo "Validando libtorch.zip..."
-if ! file /tmp/libtorch.zip | grep -q "Zip archive"; then
-    echo "Error: libtorch.zip no es un archivo zip válido"
-    cat /tmp/libtorch.zip | head -n 10
+# Combinar partes de libtorch
+echo "Combinando partes de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
+cat /tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.part* > /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip || { echo "Error: No se pudo combinar libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip"; exit 1; }
+
+# Validar que libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip es un archivo zip
+echo "Validando libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
+if ! file /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip | grep -q "Zip archive"; then
+    echo "Error: libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip no es un archivo zip válido"
+    cat /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip | head -n 10
     exit 1
 fi
 
-# Descomprimir libtorch.zip usando Python
-echo "Descomprimiendo libtorch.zip con Python..."
-python3 - <<EOF || { echo "Error: No se pudo descomprimir libtorch.zip"; exit 1; }
+# Listar contenido del zip para depuración
+echo "Listando contenido de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
+python3 - <<EOF
+import zipfile
+with zipfile.ZipFile('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip', 'r') as zip_ref:
+    for file in zip_ref.namelist():
+        print(file)
+EOF
+
+# Descomprimir libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip usando Python
+echo "Descomprimiendo libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip con Python..."
+python3 - <<EOF || { echo "Error: No se pudo descomprimir libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip"; exit 1; }
 import zipfile
 import os
-with zipfile.ZipFile('/tmp/libtorch.zip', 'r') as zip_ref:
+with zipfile.ZipFile('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip', 'r') as zip_ref:
     zip_ref.extractall('/tmp/libtorch')
-os.remove('/tmp/libtorch.zip')
+os.remove('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip')
 EOF
+
+# Verificar contenido extraído
+echo "Verificando contenido extraído en /tmp/libtorch..."
+ls -laR /tmp/libtorch || { echo "Error: No se pudo listar /tmp/libtorch"; exit 1; }
+
+# Ajustar estructura si está anidada
+if [ -d "/tmp/libtorch/libtorch" ]; then
+    echo "Estructura anidada detectada, moviendo archivos..."
+    mv /tmp/libtorch/libtorch/* /tmp/libtorch/ || { echo "Error: No se pudo mover archivos anidados"; exit 1; }
+    rmdir /tmp/libtorch/libtorch
+fi
 
 # Verificar libtorch
 echo "Verificando contenido de libtorch..."
-ls -lh /tmp/libtorch/lib /tmp/libtorch/include/torch || { echo "Error: No se pudo listar /tmp/libtorch"; exit 1; }
+ls -lh /tmp/libtorch/lib /tmp/libtorch/include/torch || { echo "Error: No se pudo listar /tmp/libtorch/lib o /tmp/libtorch/include/torch"; exit 1; }
 if [ ! -f "/tmp/libtorch/include/torch/script.h" ]; then
     echo "Error: torch/script.h no se encuentra en /tmp/libtorch/include/torch"
     ls -la /tmp/libtorch/include/torch
@@ -58,6 +87,16 @@ if [ ! -f "/tmp/libtorch/lib/libtorch.so" ]; then
     ls -la /tmp/libtorch/lib
     exit 1
 fi
+
+# Verificar partes de wheels.zip
+echo "Verificando partes de wheels.zip..."
+for part in partaa partab partac partad partae partaf partag partah partai partaj partak partal partam partan partao partap partaq partar partas partat partau; do
+    if [ ! -f "/tmp/src/lib/wheels.zip.$part" ]; then
+        echo "Error: wheels.zip.$part no encontrado"
+        ls -la /tmp/src/lib
+        exit 1
+    fi
+done
 
 # Combinar partes de wheels.zip
 echo "Combinando partes de wheels.zip..."
@@ -71,6 +110,15 @@ if ! file /tmp/wheels.zip | grep -q "Zip archive"; then
     exit 1
 fi
 
+# Listar contenido del zip para depuración
+echo "Listando contenido de wheels.zip..."
+python3 - <<EOF
+import zipfile
+with zipfile.ZipFile('/tmp/wheels.zip', 'r') as zip_ref:
+    for file in zip_ref.namelist():
+        print(file)
+EOF
+
 # Descomprimir wheels.zip usando Python
 echo "Descomprimiendo wheels.zip con Python..."
 python3 - <<EOF || { echo "Error: No se pudo descomprimir wheels.zip"; exit 1; }
@@ -80,6 +128,17 @@ with zipfile.ZipFile('/tmp/wheels.zip', 'r') as zip_ref:
     zip_ref.extractall('/tmp/wheels')
 os.remove('/tmp/wheels.zip')
 EOF
+
+# Verificar contenido extraído
+echo "Verificando contenido extraído en /tmp/wheels..."
+ls -laR /tmp/wheels || { echo "Error: No se pudo listar /tmp/wheels"; exit 1; }
+
+# Ajustar estructura si está anidada
+if [ -d "/tmp/wheels/wheels" ]; then
+    echo "Estructura anidada detectada, moviendo archivos..."
+    mv /tmp/wheels/wheels/* /tmp/wheels/ || { echo "Error: No se pudo mover archivos anidados"; exit 1; }
+    rmdir /tmp/wheels/wheels
+fi
 
 # Verificar wheels
 echo "Verificando directorio de wheels..."
