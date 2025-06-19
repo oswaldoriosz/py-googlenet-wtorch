@@ -2,17 +2,13 @@
 #!/bin/bash
 set -e
 
-# Version 2.9
+# Version 2.10
 # Directorio de trabajo
 cd /tmp/src
 
-# Verificar si g++, wget y python3 están instalados
+# Verificar si g++, python3 y file están instalados
 if ! command -v g++ &> /dev/null; then
     echo "Error: g++ no está instalado"
-    exit 1
-fi
-if ! command -v wget &> /dev/null; then
-    echo "Error: wget no está instalado"
     exit 1
 fi
 if ! command -v python3 &> /dev/null; then
@@ -27,9 +23,9 @@ fi
 # Crear directorios temporales
 mkdir -p /tmp/libtorch /tmp/wheels
 
-# Descargar libtorch.zip desde Google Drive
-echo "Descargando libtorch.zip desde Google Drive..."
-wget -O /tmp/libtorch.zip "https://drive.google.com/uc?export=download&id=19R2wgwkuK_FcAGmpx6GmlCMx_SeGSRX5" || { echo "Error: No se pudo descargar libtorch.zip"; exit 1; }
+# Combinar partes de libtorch.zip
+echo "Combinando partes de libtorch.zip..."
+cat /tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.part* > /tmp/libtorch.zip || { echo "Error: No se pudo combinar libtorch.zip"; exit 1; }
 
 # Validar que libtorch.zip es un archivo zip
 echo "Validando libtorch.zip..."
@@ -63,9 +59,9 @@ if [ ! -f "/tmp/libtorch/lib/libtorch.so" ]; then
     exit 1
 fi
 
-# Descargar wheels.zip desde Google Drive
-echo "Descargando wheels.zip desde Google Drive..."
-wget -O /tmp/wheels.zip "https://drive.google.com/uc?export=download&id=147OfftZKzGFBsTyh_wDFZ4C1PkMTv05E" || { echo "Error: No se pudo descargar wheels.zip"; exit 1; }
+# Combinar partes de wheels.zip
+echo "Combinando partes de wheels.zip..."
+cat /tmp/src/lib/wheels.zip.part* > /tmp/wheels.zip || { echo "Error: No se pudo combinar wheels.zip"; exit 1; }
 
 # Validar que wheels.zip es un archivo zip
 echo "Validando wheels.zip..."
