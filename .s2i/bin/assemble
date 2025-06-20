@@ -2,7 +2,7 @@
 set -e
 set -x  # Enable debug output
 
-# Version 2.18
+# Version 2.19
 
 # Ensure required commands are available
 command -v g++ >/dev/null 2>&1 || { echo "g++ is not installed"; exit 1; }
@@ -39,6 +39,23 @@ cat /tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.part* > /tmp/
 echo "Validando libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
 if ! file /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip | grep -q 'Zip archive'; then
     echo "Invalid libtorch zip file"
+    exit 1
+fi
+
+# Extract libtorch
+echo "Descomprimiendo libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
+python3 - <<EOF
+import zipfile
+import os
+os.makedirs('/tmp/libtorch', exist_ok=True)
+with zipfile.ZipFile('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip', 'r') as zip_ref:
+    zip_ref.extractall('/tmp/libtorch')
+EOF
+
+# Verify torch/script.h
+echo "Verificando torch/script.h..."
+if [ ! -f "/tmp/libtorch/libtorch/include/torch/script.h" ]; then
+    echo "Error: torch/script.h not found in libtorch archive"
     exit 1
 fi
 
@@ -120,9 +137,9 @@ echo "Compilando googlenet.so..."
 g++ -shared -fPIC -o googlenet.so main.cpp \
     -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
     -I/usr/include/python3.12 \
-    -I/tmp/libtorch/include \
-    -I/tmp/libtorch/include/torch/csrc/api/include \
-    -L/tmp/libtorch/lib \
+    -I/tmp/libtorch/libtorch/include \
+    -I/tmp/libtorch/libtorch/include/torch/csrc/api/include \
+    -L/tmp/libtorch/libtorch/lib \
     -ltorch -ltorch_cpu -lc10 \
     -std=c++17 \
     -Wl,-rpath,/opt/app-root/src/libtorch/lib || { echo "Error compiling googlenet.so"; exit 1; }
