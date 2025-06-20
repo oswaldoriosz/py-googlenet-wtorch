@@ -1,51 +1,48 @@
 #!/bin/bash
-set -e  # Exit on error
+set -e
 set -x  # Enable debug output
 
-# Version 2.17
-# Directorio de trabajo
+# Version 2.18
+
+# Ensure required commands are available
+command -v g++ >/dev/null 2>&1 || { echo "g++ is not installed"; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed"; exit 1; }
+command -v file >/dev/null 2>&1 || { echo "file is not installed"; exit 1; }
+
+# Check for Python.h to verify python3-devel is installed
+if [ ! -f "/usr/include/python3.12/Python.h" ]; then
+    echo "Error: Python.h not found. Ensure python3-devel is installed in the builder image."
+    echo "Please use a custom builder image with python3-devel, gcc, gcc-c++, and make pre-installed."
+    exit 1
+fi
+
+# Change to source directory
 cd /tmp/src
 
-# Verificar si g++, python3 y file están instalados
-if ! command -v g++ &> /dev/null; then
-    echo "Error: g++ no está instalado"
-    exit 1
-fi
-if ! command -v python3 &> /dev/null; then
-    echo "Error: python3 no está instalado"
-    exit 1
-fi
-if ! command -v file &> /dev/null; then
-    echo "Error: file no está instalado"
-    exit 1
-fi
-
-# Crear directorios temporales
+# Create directories for libtorch and wheels
 mkdir -p /tmp/libtorch /tmp/wheels
 
-# Verificar partes de libtorch
+# Verify libtorch parts
 echo "Verificando partes de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
 for part in partaa partab partac partad partae; do
     if [ ! -f "/tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.$part" ]; then
-        echo "Error: libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.$part no encontrado"
-        ls -la /tmp/src/lib
+        echo "Missing libtorch part: $part"
         exit 1
     fi
 done
 
-# Combinar partes de libtorch
+# Combine libtorch parts
 echo "Combinando partes de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
-cat /tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.part* > /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip || { echo "Error: No se pudo combinar libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip"; exit 1; }
+cat /tmp/src/lib/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip.part* > /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip
 
-# Validar que libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip es un archivo zip
+# Validate libtorch zip
 echo "Validando libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
-if ! file /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip | grep -q "Zip archive"; then
-    echo "Error: libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip no es un archivo zip válido"
-    cat /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip | head -n 10
+if ! file /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip | grep -q 'Zip archive'; then
+    echo "Invalid libtorch zip file"
     exit 1
 fi
 
-# Listar contenido del zip para depuración
+# List libtorch contents
 echo "Listando contenido de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
 python3 - <<EOF
 import zipfile
@@ -54,64 +51,27 @@ with zipfile.ZipFile('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip', '
         print(file)
 EOF
 
-# Descomprimir libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip usando Python
-echo "Descomprimiendo libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip con Python..."
-python3 - <<EOF || { echo "Error: No se pudo descomprimir libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip"; exit 1; }
-import zipfile
-import os
-with zipfile.ZipFile('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip', 'r') as zip_ref:
-    zip_ref.extractall('/tmp/libtorch')
-os.remove('/tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip')
-EOF
-
-# Verificar contenido extraído
-echo "Verificando contenido extraído en /tmp/libtorch..."
-ls -laR /tmp/libtorch || { echo "Error: No se pudo listar /tmp/libtorch"; exit 1; }
-
-# Ajustar estructura si está anidada
-if [ -d "/tmp/libtorch/libtorch" ]; then
-    echo "Estructura anidada detectada, moviendo archivos..."
-    mv /tmp/libtorch/libtorch/* /tmp/libtorch/ || { echo "Error: No se pudo mover archivos anidados"; exit 1; }
-    rmdir /tmp/libtorch/libtorch
-fi
-
-# Verificar libtorch
-echo "Verificando contenido de libtorch..."
-ls -lh /tmp/libtorch/lib /tmp/libtorch/include/torch || { echo "Error: No se pudo listar /tmp/libtorch/lib o /tmp/libtorch/include/torch"; exit 1; }
-if [ ! -f "/tmp/libtorch/include/torch/script.h" ]; then
-    echo "Error: torch/script.h no se encuentra en /tmp/libtorch/include/torch"
-    ls -la /tmp/libtorch/include/torch
-    exit 1
-fi
-if [ ! -f "/tmp/libtorch/lib/libtorch.so" ]; then
-    echo "Error: libtorch.so no se encuentra en /tmp/libtorch/lib"
-    ls -la /tmp/libtorch/lib
-    exit 1
-fi
-
-# Verificar partes de wheels.zip
+# Verify wheels parts
 echo "Verificando partes de wheels.zip..."
-for part in partaa partab partac partad partae partaf partag partah partai partaj partak partal partam partan partao partap partaq partar partas partat partau; do
+for part in partaa partab partac partad partae partaf; do
     if [ ! -f "/tmp/src/lib/wheels.zip.$part" ]; then
-        echo "Error: wheels.zip.$part no encontrado"
-        ls -la /tmp/src/lib
+        echo "Missing wheels part: $part"
         exit 1
     fi
 done
 
-# Combinar partes de wheels.zip
+# Combine wheels parts
 echo "Combinando partes de wheels.zip..."
-cat /tmp/src/lib/wheels.zip.part* > /tmp/wheels.zip || { echo "Error: No se pudo combinar wheels.zip"; exit 1; }
+cat /tmp/src/lib/wheels.zip.part* > /tmp/wheels.zip
 
-# Validar que wheels.zip es un archivo zip
+# Validate wheels zip
 echo "Validando wheels.zip..."
-if ! file /tmp/wheels.zip | grep -q "Zip archive"; then
-    echo "Error: wheels.zip no es un archivo zip válido"
-    cat /tmp/wheels.zip | head -n 10
+if ! file /tmp/wheels.zip | grep -q 'Zip archive'; then
+    echo "Invalid wheels zip file"
     exit 1
 fi
 
-# Listar contenido del zip para depuración
+# List wheels contents
 echo "Listando contenido de wheels.zip..."
 python3 - <<EOF
 import zipfile
@@ -120,61 +80,57 @@ with zipfile.ZipFile('/tmp/wheels.zip', 'r') as zip_ref:
         print(file)
 EOF
 
-# Descomprimir wheels.zip usando Python
+# Extract wheels
 echo "Descomprimiendo wheels.zip con Python..."
-python3 - <<EOF || { echo "Error: No se pudo descomprimir wheels.zip"; exit 1; }
+python3 - <<EOF
 import zipfile
 import os
+os.makedirs('/tmp/wheels', exist_ok=True)
 with zipfile.ZipFile('/tmp/wheels.zip', 'r') as zip_ref:
     zip_ref.extractall('/tmp/wheels')
-os.remove('/tmp/wheels.zip')
 EOF
 
-# Verificar contenido extraído
+# Verify extracted wheels
 echo "Verificando contenido extraído en /tmp/wheels..."
-ls -laR /tmp/wheels || { echo "Error: No se pudo listar /tmp/wheels"; exit 1; }
+ls -laR /tmp/wheels
 
-# Ajustar estructura si está anidada
-if [ -d "/tmp/wheels/wheels" ]; then
+# Handle nested wheels directory
+if [ -d /tmp/wheels/wheels ]; then
     echo "Estructura anidada detectada, moviendo archivos..."
-    mv /tmp/wheels/wheels/* /tmp/wheels/ || { echo "Error: No se pudo mover archivos anidados"; exit 1; }
+    mv /tmp/wheels/wheels/* /tmp/wheels/
     rmdir /tmp/wheels/wheels
 fi
 
-# Verificar wheels
+# Verify wheels directory
 echo "Verificando directorio de wheels..."
-ls -lh /tmp/wheels || { echo "Error: No se pudo listar /tmp/wheels"; exit 1; }
+ls -lh /tmp/wheels
 
-# Remove duplicate typing_extensions to avoid conflicts
-if ls /tmp/wheels/typing_extensions-4.12.2-py3-none-any.whl > /dev/null 2>&1; then
+# Remove conflicting typing_extensions version
+if [ -f /tmp/wheels/typing_extensions-4.12.2-py3-none-any.whl ]; then
     echo "Removing typing_extensions-4.12.2 to avoid conflict with 4.14.0..."
     rm /tmp/wheels/typing_extensions-4.12.2-py3-none-any.whl
 fi
 
-# Instalar dependencias de Python desde los wheels
+# Install dependencies from wheels
 echo "Instalando dependencias desde /tmp/wheels..."
-pip install --no-cache-dir --verbose /tmp/wheels/*.whl
+pip install --no-cache-dir --no-index --verbose /tmp/wheels/*.whl || { echo "Error installing wheels"; exit 1; }
 
-# Compilar el módulo C++ usando libtorch
+# Compile googlenet.so
 echo "Compilando googlenet.so..."
 g++ -shared -fPIC -o googlenet.so main.cpp \
     -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
+    -I/usr/include/python3.12 \
     -I/tmp/libtorch/include \
     -I/tmp/libtorch/include/torch/csrc/api/include \
     -L/tmp/libtorch/lib \
     -ltorch -ltorch_cpu -lc10 \
     -std=c++17 \
-    -Wl,-rpath,/opt/app-root/src/libtorch/lib
+    -Wl,-rpath,/opt/app-root/src/libtorch/lib || { echo "Error compiling googlenet.so"; exit 1; }
 
-# Copiar los archivos necesarios al directorio de runtime
-echo "Copiando archivos al directorio de runtime..."
-mkdir -p /opt/app-root/src/libtorch
-cp googlenet.so main.py /opt/app-root/src/
-cp -r /tmp/libtorch/* /opt/app-root/src/libtorch/
+# Move compiled output to appropriate location
+mv googlenet.so /opt/app-root/src/
 
-# Configurar permisos
-echo "Configurando permisos..."
-chown -R 1001:0 /opt/app-root/src
-chmod -R g+w /opt/app-root/src
-chmod +x /opt/app-root/src/main.py
+# Clean up temporary files
+rm -rf /tmp/libtorch /tmp/wheels /tmp/libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip /tmp/wheels.zip
+
 echo "Assemble completado exitosamente."
