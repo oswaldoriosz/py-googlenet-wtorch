@@ -16,7 +16,7 @@ matplotlib.use('Agg')  # Usar backend no interactivo
 app = FastAPI()
 
 # Directorio del PVC montado en OpenShift
-UPLOAD_FOLDER = "/opt/app-root/src/data/"
+UPLOAD_FOLDER = "/opt/app-root/src/models"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def preprocess_image(image_path):
