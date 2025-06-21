@@ -2,7 +2,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import torch
-import torchvision.transforms as transforms
+from torchvision import transforms
 from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
