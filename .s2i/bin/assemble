@@ -84,7 +84,7 @@ EOF
 
 # Verify wheels parts
 echo "Verificando partes de wheels.zip..."
-for part in partaa partab partac partad partae partaf; do
+for part in partaa partab partac partad partae partaf partag partah partai partaj partak partal partam partan partao partap partaq partar partas partat; do
     if [ ! -f "/tmp/src/lib/wheels.zip.$part" ]; then
         echo "Missing wheels part: $part"
         exit 1
