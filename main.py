@@ -2,6 +2,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import torch
+torch._C._set_dispatch_mode("DISABLE")
 from torchvision import transforms
 from PIL import Image
 import matplotlib
