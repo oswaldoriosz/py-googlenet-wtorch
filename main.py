@@ -2,10 +2,6 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import torch
-try:
-    torch._C._set_dispatch_mode("DISABLE")
-except AttributeError:
-    print("Advertencia: No se pudo desactivar el modo de despacho en PyTorch")
 from torchvision import transforms
 from PIL import Image
 import matplotlib
