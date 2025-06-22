@@ -2,10 +2,14 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import torch
-torch._C._set_dispatch_mode("DISABLE")
+try:
+    torch._C._set_dispatch_mode("DISABLE")
+except AttributeError:
+    print("Advertencia: No se pudo desactivar el modo de despacho en PyTorch")
 from torchvision import transforms
 from PIL import Image
 import matplotlib
+matplotlib.use('Agg')  # Usar backend no interactivo
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import googlenet 
@@ -13,7 +17,6 @@ import json
 import shutil
 import os
 
-matplotlib.use('Agg')  # Usar backend no interactivo
 app = FastAPI()
 
 # Directorio del PVC montado en OpenShift
@@ -21,25 +24,31 @@ UPLOAD_FOLDER = "/opt/app-root/src/models"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def preprocess_image(image_path):
-    # Cargar la imagen
-    image = Image.open(image_path).convert("RGB")
+    """Preprocesa una imagen para el modelo GoogleNet."""
+    try:
+        # Cargar la imagen
+        image = Image.open(image_path).convert("RGB")
 
-    # Definir las transformaciones
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+        # Definir las transformaciones
+        transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
-    # Aplicar transformaciones
-    tensor = transform(image).unsqueeze(0)  # Añadir dimensión batch
+        # Aplicar transformaciones
+        tensor = transform(image).unsqueeze(0).to('cpu')  # Añadir dimensión batch y asegurar CPU
 
-    # Guardar el tensor en el PVC
-    tensor_path = os.path.join(UPLOAD_FOLDER, "preprocessed_tensor.pt")
-    torch.save(tensor, tensor_path)
+        # Guardar el tensor en el PVC
+        tensor_path = os.path.join(UPLOAD_FOLDER, "preprocessed_tensor.pt")
+        torch.save(tensor, tensor_path)
+        return tensor_path
+    except Exception as e:
+        raise Exception(f"Error al preprocesar la imagen: {str(e)}")
 
 def load_imagenet_labels():
+    """Carga las etiquetas de ImageNet desde un archivo o genera etiquetas simuladas."""
     labels_path = os.path.join(UPLOAD_FOLDER, "imagenet_classes.txt")
     try:
         with open(labels_path, "r") as f:
@@ -50,24 +59,33 @@ def load_imagenet_labels():
 
 @app.post("/pre-procesar-imagen")
 async def preprocesar(file: UploadFile = File(...)):
-    file_location = os.path.join(UPLOAD_FOLDER, file.filename)
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    """Procesa una imagen subida y guarda el tensor preprocesado."""
+    try:
+        file_location = os.path.join(UPLOAD_FOLDER, file.filename)
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    preprocess_image(file_location)
-    return {"filename": file.filename, "message": "Imagen procesada exitosamente"}
+        preprocess_image(file_location)
+        return {"filename": file.filename, "message": "Imagen procesada exitosamente"}
+    except Exception as e:
+        return {"error": f"Error al procesar la imagen: {str(e)}"}
 
 @app.post("/clasificador")
 def calculo():
+    """Realiza la clasificación con GoogleNet y genera una gráfica de resultados."""
     output_file = os.path.join(UPLOAD_FOLDER, 'googlenet_results.png')
-    
     model_path = os.path.join(UPLOAD_FOLDER, "googlenet.pt")
     tensor_path = os.path.join(UPLOAD_FOLDER, "preprocessed_tensor.pt")
-    class_names = load_imagenet_labels()
-
-    service = googlenet.GoogLeNetService("clasificador")
     
     try:
+        # Verificar que los archivos necesarios existan
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Modelo no encontrado: {model_path}")
+        if not os.path.exists(tensor_path):
+            raise FileNotFoundError(f"Tensor preprocesado no encontrado: {tensor_path}")
+
+        class_names = load_imagenet_labels()
+        service = googlenet.GoogLeNetService("clasificador")
         results = service.classify(model_path, tensor_path, class_names)
         
         print("Top-5 predicciones:")
@@ -94,18 +112,16 @@ def calculo():
         plt.savefig(output_file)
         plt.close()
         
+        response = {"Grafica generada": output_file}
+        return json.dumps(response)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error en clasificación: {str(e)}")
         return {"error": str(e)}
-    
-    j1 = {
-        "Grafica generada": output_file
-    }
-    jj = json.dumps(str(j1))
-
-    return jj
 
 @app.get("/googlenet-graph")
 def getGraph():
+    """Devuelve la gráfica generada como imagen PNG."""
     output_file = os.path.join(UPLOAD_FOLDER, 'googlenet_results.png')
-    return FileResponse(output_file, media_type="image/png", filename=output_file)
+    if not os.path.exists(output_file):
+        return {"error": f"Gráfica no encontrada: {output_file}"}
+    return FileResponse(output_file, media_type="image/png", filename=os.path.basename(output_file))
