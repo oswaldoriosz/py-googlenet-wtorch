@@ -6,8 +6,6 @@
 #include "adapters/TorchInference.hpp"
 #include "adapters/TorchImagePreprocessor.hpp"
 
-// g++ -shared -fPIC -o googlenet.so main.cpp -I/home/hadoop/Documentos/cpp_programs/pybind/py-googlenet-torch/myenv/lib/python3.12/site-packages/pybind11/include -I/home/hadoop/libtorch/include -I/home/hadoop/libtorch/include/torch/csrc/api/include -I/usr/include/python3.12 -L/home/hadoop/libtorch/lib -ltorch -ltorch_cpu -lc10 -std=c++17 -Wl,-rpath,/home/hadoop/libtorch/lib
-
 namespace py = pybind11;
 
 // Forzar la generación de la vtable
