@@ -2,7 +2,7 @@
 set -e
 set -x  # Enable debug output
 
-# Version 2.20
+# Version 2.23
 
 # Ensure required commands are available
 command -v g++ >/dev/null 2>&1 || { echo "g++ is not installed"; exit 1; }
@@ -15,6 +15,9 @@ if [ ! -f "/usr/include/python3.12/Python.h" ]; then
     echo "Please use a custom builder image with python3-devel, gcc, gcc-c++, and make pre-installed."
     exit 1
 fi
+
+# Install system dependencies for PIL
+dnf install -y libpng-devel libjpeg-devel || { echo "Error installing system dependencies"; exit 1; }
 
 # Change to source directory
 cd /tmp/src
@@ -33,8 +36,15 @@ if [ -f /tmp/src/requirements.txt ]; then
     cp -v /tmp/src/requirements.txt /opt/app-root/src/
 fi
 
+# Copy model if exists
+mkdir -p /opt/app-root/src/models
+if [ -f /tmp/src/models/googlenet.pt ]; then
+    echo "Copiando googlenet.pt a /opt/app-root/src/models/"
+    cp -v /tmp/src/models/googlenet.pt /opt/app-root/src/models/
+fi
+
 # Create directories for libtorch and wheels
-mkdir -p /tmp/libtorch /tmp/wheels
+mkdir -p /tmp/libtorch /tmp/wheels /opt/app-root/src/libtorch/lib
 
 # Verify libtorch parts
 echo "Verificando partes de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
@@ -72,6 +82,18 @@ if [ ! -f "/tmp/libtorch/libtorch/include/torch/script.h" ]; then
     echo "Error: torch/script.h not found in libtorch archive"
     exit 1
 fi
+
+# Copy libtorch libraries to persistent location
+echo "Copiando bibliotecas de libtorch a /opt/app-root/src/libtorch/lib..."
+cp -r /tmp/libtorch/libtorch/lib/* /opt/app-root/src/libtorch/lib/
+
+# Verify copied libraries
+echo "Verificando bibliotecas copiadas en /opt/app-root/src/libtorch/lib..."
+ls -lh /opt/app-root/src/libtorch/lib/
+
+# Set LD_LIBRARY_PATH
+echo "Configurando LD_LIBRARY_PATH..."
+echo "export LD_LIBRARY_PATH=/opt/app-root/src/libtorch/lib:\$LD_LIBRARY_PATH" >> /opt/app-root/etc/scl_enable
 
 # List libtorch contents
 echo "Listando contenido de libtorch-cxx11-abi-shared-with-deps-2.4.1+cpu.zip..."
@@ -146,13 +168,25 @@ fi
 echo "Instalando dependencias desde /tmp/wheels..."
 pip install --no-cache-dir --no-index --verbose /tmp/wheels/*.whl || { echo "Error installing wheels"; exit 1; }
 
+# Verify source files for compilation
+echo "Verificando archivos fuente para compilación..."
+for file in main.cpp adapters/TorchImagePreprocessor.cpp; do
+    if [ ! -f "/tmp/src/$file" ]; then
+        echo "Missing source file: $file"
+        exit 1
+    fi
+done
+
 # Compile googlenet.so
 echo "Compilando googlenet.so..."
-g++ -shared -fPIC -o googlenet.so main.cpp \
+g++ -shared -fPIC -o googlenet.so \
+    main.cpp \
+    adapters/TorchImagePreprocessor.cpp \
     -I/opt/app-root/lib64/python3.12/site-packages/pybind11/include \
     -I/usr/include/python3.12 \
     -I/tmp/libtorch/libtorch/include \
     -I/tmp/libtorch/libtorch/include/torch/csrc/api/include \
+    -I/tmp/src/ports \
     -L/tmp/libtorch/libtorch/lib \
     -ltorch -ltorch_cpu -lc10 \
     -std=c++17 \
