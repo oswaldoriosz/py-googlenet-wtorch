@@ -4,6 +4,7 @@
 #include "adapters/TorchModelLoader.hpp"
 #include "adapters/TorchImageProcessor.hpp"
 #include "adapters/TorchInference.hpp"
+#include "adapters/TorchImagePreprocessor.hpp"
 
 // g++ -shared -fPIC -o googlenet.so main.cpp -I/home/hadoop/Documentos/cpp_programs/pybind/py-googlenet-torch/myenv/lib/python3.12/site-packages/pybind11/include -I/home/hadoop/libtorch/include -I/home/hadoop/libtorch/include/torch/csrc/api/include -I/usr/include/python3.12 -L/home/hadoop/libtorch/lib -ltorch -ltorch_cpu -lc10 -std=c++17 -Wl,-rpath,/home/hadoop/libtorch/lib
 
@@ -15,6 +16,7 @@ namespace adapters {
         TorchImageProcessor dummy_processor;
         TorchModelLoader dummy_loader;
         TorchInference dummy_inference;
+        TorchImagePreprocessor dummy_preprocessor;
     }
 }
 
@@ -31,4 +33,9 @@ PYBIND11_MODULE(googlenet, m) {
             );
         }))
         .def("classify", &domain::GoogLeNetService::classify);
+
+    m.def("preprocess_image", [](py::object image, const std::string& output_path) {
+        adapters::TorchImagePreprocessor preprocessor;
+        preprocessor.preprocess(image, output_path);
+    }, "Preprocesa una imagen PIL y guarda el tensor en el archivo especificado");
 }

@@ -1,18 +1,16 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import torch
-from torchvision import transforms
 from PIL import Image
 import matplotlib
-matplotlib.use('Agg')  # Usar backend no interactivo
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import googlenet 
+import googlenet
 import json
 import shutil
 import os
 
+matplotlib.use('Agg')  # Usar backend no interactivo
 app = FastAPI()
 
 # Directorio del PVC montado en OpenShift
@@ -20,25 +18,14 @@ UPLOAD_FOLDER = "/opt/app-root/src/models"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def preprocess_image(image_path):
-    """Preprocesa una imagen para el modelo GoogleNet."""
+    """Preprocesa una imagen para el modelo GoogleNet usando C++."""
     try:
         # Cargar la imagen
         image = Image.open(image_path).convert("RGB")
 
-        # Definir las transformaciones
-        transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-
-        # Aplicar transformaciones
-        tensor = transform(image).unsqueeze(0).to('cpu')  # Añadir dimensión batch y asegurar CPU
-
-        # Guardar el tensor en el PVC
+        # Llamar al método C++ para preprocesar y guardar el tensor
         tensor_path = os.path.join(UPLOAD_FOLDER, "preprocessed_tensor.pt")
-        torch.save(tensor, tensor_path)
+        googlenet.preprocess_image(image, tensor_path)
         return tensor_path
     except Exception as e:
         raise Exception(f"Error al preprocesar la imagen: {str(e)}")
