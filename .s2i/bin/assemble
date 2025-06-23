@@ -17,7 +17,7 @@ if [ ! -f "/usr/include/python3.12/Python.h" ]; then
 fi
 
 # Install system dependencies for PIL
-dnf install -y libpng-devel libjpeg-devel || { echo "Error installing system dependencies"; exit 1; }
+# dnf install -y libpng-devel libjpeg-devel || { echo "Error installing system dependencies"; exit 1; }
 
 # Change to source directory
 cd /tmp/src
